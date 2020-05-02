@@ -7,6 +7,8 @@ class KrakenUtils(object):
     def __init__(self):
         self.api = API()
         self.previousOHLC = None
+        self.previousRecentTrade = None
+        self.previousSpread = None
 
     def get_time(self, timeMode='unix'):
         self.api.public(method='Time', timeout=2000)
@@ -35,7 +37,7 @@ class KrakenUtils(object):
         if info:
             input['info'] = info
         input['pair'] = pair
-        
+
         self.api.public(method='AssetPairs', input=input)
         response = DotMap(self.api.response.json())
 
@@ -65,17 +67,14 @@ class KrakenUtils(object):
 
         return returnObject
 
-    def get_ohlc(self, currency_one, currency_two, interval=1, since=None, useLastOHLC=False):
-        pair = currency_one + currency_two
-        input = {}
+    def __get_data_helper(self, pair, method, input=None, since=None):
+        if not input:
+            input = {}
         input['pair'] = pair
-        input['interval'] = interval
-        if since and not useLastOHLC:
+        if since:
             input['since'] = since
-        elif useLastOHLC:
-            input['since'] = self.previousOHLC
 
-        self.api.public(method='OHLC', input=input)
+        self.api.public(method=method, input=input)
         response = DotMap(self.api.response.json())
 
         if response.error:
@@ -86,12 +85,26 @@ class KrakenUtils(object):
             if i == 0:
                 returnObject = data
             elif i == 1:
-                self.previousOHLC = data
+                returnPrevious = data
             else:
                 break
             i += 1
 
+        return returnObject, returnPrevious
+
+
+    def get_ohlc(self, currency_one, currency_two, interval=1, since=None, useLastOHLC=False):
+        pair = currency_one + currency_two
+        input = {}
+        input['interval'] = interval
+        
+        if useLastOHLC and not since:
+            since = self.previousOHLC
+
+        returnObject, self.previousOHLC = self.__get_data_helper(pair, method='OHLC', input=input, since=since)
+
         return returnObject
+        
 
     def get_order_book(self, currency_one, currency_two, count=None):
         pair = currency_one + currency_two
@@ -108,5 +121,25 @@ class KrakenUtils(object):
         for _, data in response.result.items():  # allows a bypass to the name pair, allowing for a STANDARD object
             returnObject = data
             break
+
+        return returnObject
+
+    def get_recent_trades(self, currency_one, currency_two, since=None, usePreviousRecentTrade=False):
+        pair = currency_one + currency_two
+
+        if usePreviousRecentTrade and not since:
+            since = self.previousOHLC
+
+        returnObject, self.previousRecentTrade = self.__get_data_helper(pair, 'Trades', since=since)
+
+        return returnObject
+
+    def get_spread_data(self, currency_one, currency_two, since=None, usePreviousSpread=False):
+        pair = currency_one + currency_two
+
+        if usePreviousSpread and not since:
+            since = self.previousSpread
+
+        returnObject, self.previousSpread = self.__get_data_helper(pair, 'Spread', since=since)
 
         return returnObject
