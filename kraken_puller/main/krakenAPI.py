@@ -11,6 +11,7 @@ class API(object):
         self.session = requests.Session()
         self.response = None
         self.call_rate_limit = 15
+        self.
 
     def public(self, method='Time', input=None, headers=None, timeout=None):
         url = self.url + 'public/' + method
