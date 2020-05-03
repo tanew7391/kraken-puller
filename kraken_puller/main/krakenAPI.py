@@ -1,7 +1,10 @@
-import json
-import os
 import requests
 import time
+
+import urllib.parse
+import hashlib
+import hmac
+import base64
 
 
 class API(object):
@@ -11,16 +14,31 @@ class API(object):
         self.session = requests.Session()
         self.response = None
         self.call_rate_limit = 15
-        self.
 
-    def public(self, method='Time', input=None, headers=None, timeout=None):
+    def public(self, method='Time', input=None, timeout=None):
         url = self.url + 'public/' + method
 
         if not input:
             input = {}
-        if not headers:
-            headers = {}
 
+        self.response = self.session.post(url, data=input, timeout=timeout)
+
+        if self.response.ok is False:
+            self.response.raise_for_status()
+
+        return self.response.json()
+
+    def private(self, method, input=None, timeout=None):
+        url = self.url + 'private/' + method
+
+        if not input:
+            input = {}
+
+        input['nonce'] = self._nonce()
+        headers = {
+            'API-Key': self.key,
+            'API-Sign': self._sign(input, '/0/private/' + method)
+        }
         self.response = self.session.post(url, data=input, headers=headers, timeout=timeout)
 
         if self.response.ok is False:
@@ -28,18 +46,23 @@ class API(object):
 
         return self.response.json()
 
-    def private(self, method, input=None, headers=None, timeout=None):
-    url = self.url + 'private/' + method
+    def load_key(self, path):
+        with open(path, 'r') as f:
+            self.key = f.readline().strip()
+            self.secret = f.readline().strip()
+        return
 
-    if not input:
-        input = {}
-    if not headers:
-        headers = {}
+    def _nonce(self):
+        return int(1000*time.time())
 
-    self.response = self.session.post(url, data=input, headers=headers, timeout=timeout)
+    def _sign(self, input, urlpath):
+        postdata = urllib.parse.urlencode(input)
+        encoded = (str(input['nonce']) + postdata).encode()
+        message = urlpath.encode() + hashlib.sha256(encoded).digest()
 
-    if self.response.ok is False:
-        self.response.raise_for_status()
+        signature = hmac.new(base64.b64decode(self.secret), message, hashlib.sha512)
+        sigdigest = base64.b64encode(signature.digest())
+      
+        return sigdigest.decode()
 
-    return self.response.json()
-
+    

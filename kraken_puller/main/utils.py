@@ -9,21 +9,10 @@ class KrakenUtils(object):
         self.previousOHLC = None
         self.previousRecentTrade = None
         self.previousSpread = None
+        self.api.load_key('secret.key')
 
-    def get_time(self, timeMode='unix'):
-        self.api.public(method='Time', timeout=2000)
-        response = DotMap(self.api.response.json())
-
-        if response.error:
-            raise Exception(response.error)
-
-        if timeMode == 'rfc1123':
-            return response.result.rfc1123
-        else:
-            return response.result.unixtime
-
-    def get_all_assets(self):
-        self.api.public(method='Assets')
+    def __public_api_grab(self, method, input={}):
+        self.api.public(method, input)
         response = DotMap(self.api.response.json())
 
         if response.error:
@@ -31,20 +20,26 @@ class KrakenUtils(object):
 
         return response.result
 
+    def get_time(self, timeMode='unix'):
+        response = self.__public_api_grab(method='Time')
+        if timeMode == 'rfc1123':
+            return response.rfc1123
+        else:
+            return response.unixtime
+
+    def get_all_assets(self):
+        return self.__public_api_grab(method='Assets')
+
     def get_pair_info(self, currency_one, currency_two, info=None):
-        pair = currency_one + currency_two
         input = {}
+        pair = currency_one + currency_two
+        input['pair'] = pair
         if info:
             input['info'] = info
-        input['pair'] = pair
 
-        self.api.public(method='AssetPairs', input=input)
-        response = DotMap(self.api.response.json())
+        response = self.__public_api_grab(method='AssetPairs', input=input)
 
-        if response.error:
-            raise Exception(response.error)
-
-        for _, data in response.result.items():  # allows a bypass to the name pair, allowing for a STANDARD object (XXBTCAD=Object just returns object without needing the XXBTCAD part)
+        for _, data in response.items():  # allows a bypass to the name pair, allowing for a STANDARD object (XXBTCAD=Object just returns object without needing the XXBTCAD part)
             returnObject = data
             break
 
@@ -55,13 +50,9 @@ class KrakenUtils(object):
         input = {}
         input['pair'] = pair
 
-        self.api.public(method='Ticker', input=input)
-        response = DotMap(self.api.response.json())
+        response = self.__public_api_grab(method='Ticker', input=input)
 
-        if response.error:
-            raise Exception(response.error)
-
-        for _, data in response.result.items():  # allows a bypass to the name pair, allowing for a STANDARD object
+        for _, data in response.items():  # allows a bypass to the name pair, allowing for a STANDARD object
             returnObject = data
             break
 
@@ -74,14 +65,10 @@ class KrakenUtils(object):
         if since:
             input['since'] = since
 
-        self.api.public(method=method, input=input)
-        response = DotMap(self.api.response.json())
-
-        if response.error:
-            raise Exception(response.error)
+        response = self.__public_api_grab(method=method, input=input)
 
         i = 0
-        for _, data in response.result.items():
+        for _, data in response.items():
             if i == 0:
                 returnObject = data
             elif i == 1:
@@ -92,12 +79,11 @@ class KrakenUtils(object):
 
         return returnObject, returnPrevious
 
-
     def get_ohlc(self, currency_one, currency_two, interval=1, since=None, useLastOHLC=False):
         pair = currency_one + currency_two
         input = {}
         input['interval'] = interval
-        
+
         if useLastOHLC and not since:
             since = self.previousOHLC
 
@@ -105,7 +91,6 @@ class KrakenUtils(object):
 
         return returnObject
         
-
     def get_order_book(self, currency_one, currency_two, count=None):
         pair = currency_one + currency_two
         input = {}
@@ -113,12 +98,9 @@ class KrakenUtils(object):
         if count:
             input['count'] = count
 
-        self.api.public(method='Depth', input=input)
-        response = DotMap(self.api.response.json())
-        if response.error:
-            raise Exception(response.error)
-
-        for _, data in response.result.items():  # allows a bypass to the name pair, allowing for a STANDARD object
+        response = self.__public_api_grab(method='Depth', input=input)
+ 
+        for _, data in response.items():  # allows a bypass to the name pair, allowing for an unambiguous object
             returnObject = data
             break
 
@@ -143,3 +125,95 @@ class KrakenUtils(object):
         returnObject, self.previousSpread = self.__get_data_helper(pair, 'Spread', since=since)
 
         return returnObject
+
+    def __private_api_grab(self, method, input={}):
+        self.api.private(method, input=input)
+        response = DotMap(self.api.response.json())
+        if response.error:
+            raise Exception(response.error)
+
+        return response.result
+
+    def get_account_balence(self):
+        return self.__private_api_grab(method='Balance')
+
+    def get_trade_balance(self, asset_class=None, base_currency=None):
+        input = {}
+        if asset_class:
+            input['aclass'] = asset_class  # default is currency
+        if base_currency:
+            input['asset'] = base_currency  # default is USD
+
+        return self.__private_api_grab(method='TradeBalance', input=input)
+
+    def get_open_orders(self, boolTrades=None, userref=None):
+        input = {}
+        if boolTrades:
+            input['trades'] = 'true'
+        if userref:
+            input['userref'] = userref
+
+        return self.__private_api_grab(method='OpenOrders', input=input)
+
+    def get_closed_orders(self, **kwargs):  # trades=false, userref=None, starttime=None, endtime=None, offset=None, closetime=None
+        input = {}
+        if len(kwargs) > 0:
+            input = kwargs
+
+        return self.__private_api_grab(method='ClosedOrders', input=input)
+
+    def __txid_reader(self, txid):
+        final = txid[0]
+        for ids in txid[1:]:
+            final += ', ' + ids
+        input = {
+            'txid': final
+        }
+
+        return input
+
+
+    def query_orders_info(self, txid, trades=False, userref=None):
+        input = self.__txid_reader(txid)
+
+        if trades:
+            input['trades'] = 'true'
+        if userref:
+            input['userref'] = userref
+        print(input)
+
+        return self.__private_api_grab(method='QueryOrders', input=input)
+
+    def get_trades_history(self, **kwargs):
+        input = {}
+        if len(kwargs) > 0:
+            input = kwargs
+
+        return self.__private_api_grab(method='TradesHistory', input=input)
+
+    def query_trades_info(self, txid, trades=None):
+        input = self.__txid_reader(txid)
+
+        if trades:
+            input['trades'] = 'true'
+
+        return self.__private_api_grab(method='QueryTrades', input=input)
+
+    def get_open_positions(self, txid, docalcs=False, consolidation=None):
+        input = self.__txid_reader(txid)
+
+        if docalcs:
+            input['docals'] = 'true'
+        if consolidation:
+            input['consolidation'] = consolidation
+
+        return self.__private_api_grab(method='OpenPositions', input=input)
+
+    def get_ledgers_info(self, **kwargs):
+        input = {}
+        if len(kwargs) > 0:
+            input = kwargs
+
+        return self.__private_api_grab(method='Ledgers', input=input)
+
+
