@@ -10,6 +10,9 @@ class KrakenUtils(object):
         self.previousRecentTrade = None
         self.previousSpread = None
         self.api.load_key('secret.key')
+        self.calls = 0
+        self.call_limit = 20  #  make adjustable
+
 
     def __public_api_grab(self, method, input={}):
         self.api.public(method, input)
@@ -276,3 +279,7 @@ class KrakenUtils(object):
     def status_recent_withdrawals(self):
         pass
 
+    def _call_increase(self, amount):
+        self.call_increase += amount
+        if self.call_increase > self.call_limit:
+            raise Exception('Call limit reached. Please wait one minute')
