@@ -87,10 +87,11 @@ class KrakenUtils(object):
         if useLastOHLC and not since:
             since = self.previousOHLC
 
-        returnObject, self.previousOHLC = self.__get_data_helper(pair, method='OHLC', input=input, since=since)
+        returnObject, self.previousOHLC = self.__get_data_helper(
+            pair, method='OHLC', input=input, since=since)
 
         return returnObject
-        
+
     def get_order_book(self, currency_one, currency_two, count=None):
         pair = currency_one + currency_two
         input = {}
@@ -99,7 +100,7 @@ class KrakenUtils(object):
             input['count'] = count
 
         response = self.__public_api_grab(method='Depth', input=input)
- 
+
         for _, data in response.items():  # allows a bypass to the name pair, allowing for an unambiguous object
             returnObject = data
             break
@@ -112,7 +113,8 @@ class KrakenUtils(object):
         if usePreviousRecentTrade and not since:
             since = self.previousOHLC
 
-        returnObject, self.previousRecentTrade = self.__get_data_helper(pair, 'Trades', since=since)
+        returnObject, self.previousRecentTrade = self.__get_data_helper(
+            pair, 'Trades', since=since)
 
         return returnObject
 
@@ -122,7 +124,8 @@ class KrakenUtils(object):
         if usePreviousSpread and not since:
             since = self.previousSpread
 
-        returnObject, self.previousSpread = self.__get_data_helper(pair, 'Spread', since=since)
+        returnObject, self.previousSpread = self.__get_data_helper(
+            pair, 'Spread', since=since)
 
         return returnObject
 
@@ -155,26 +158,25 @@ class KrakenUtils(object):
 
         return self.__private_api_grab(method='OpenOrders', input=input)
 
-    def get_closed_orders(self, **kwargs):  # trades=false, userref=None, starttime=None, endtime=None, offset=None, closetime=None
+    # trades=false, userref=None, starttime=None, endtime=None, offset=None, closetime=None
+    def get_closed_orders(self, **kwargs):
         input = {}
         if len(kwargs) > 0:
             input = kwargs
 
         return self.__private_api_grab(method='ClosedOrders', input=input)
 
-    def __txid_reader(self, txid):
-        final = txid[0]
-        for ids in txid[1:]:
+    def __tuple_reader(self, tuple, dataname):
+        final = tuple[0]
+        for ids in tuple[1:]:
             final += ', ' + ids
         input = {
-            'txid': final
+            dataname: final
         }
-
         return input
 
-
     def query_orders_info(self, txid, trades=False, userref=None):
-        input = self.__txid_reader(txid)
+        input = self.__tuple_reader(txid, 'txid')
 
         if trades:
             input['trades'] = 'true'
@@ -192,7 +194,7 @@ class KrakenUtils(object):
         return self.__private_api_grab(method='TradesHistory', input=input)
 
     def query_trades_info(self, txid, trades=None):
-        input = self.__txid_reader(txid)
+        input = self.__tuple_reader(txid, 'txid')
 
         if trades:
             input['trades'] = 'true'
@@ -200,7 +202,7 @@ class KrakenUtils(object):
         return self.__private_api_grab(method='QueryTrades', input=input)
 
     def get_open_positions(self, txid, docalcs=False, consolidation=None):
-        input = self.__txid_reader(txid)
+        input = self.__tuple_reader(txid, 'txid')
 
         if docalcs:
             input['docals'] = 'true'
@@ -209,11 +211,68 @@ class KrakenUtils(object):
 
         return self.__private_api_grab(method='OpenPositions', input=input)
 
-    def get_ledgers_info(self, **kwargs):
+    def get_ledgers_info(self, asset=None, **kwargs):  # aclass='currency', asset
         input = {}
+        if asset:
+            input.update(self.__tuple_reader(asset, 'asset'))
+
         if len(kwargs) > 0:
-            input = kwargs
+            input.update(kwargs)
 
         return self.__private_api_grab(method='Ledgers', input=input)
 
+    def query_ledgers(self, id):
+        input = self.__tuple_reader(id, 'id')
+        return self.__private_api_grab(method='QueryLedgers', input=input)
+
+    def get_trade_volume(self, pair=None, feeinfo=None):
+        input = {}
+        if pair:
+            input.update(self.__tuple_reader(pair, 'pair'))
+        if feeinfo:
+            input.update({'fee-info': feeinfo})
+        
+        return self.__private_api_grab(method='TradeVolume', input=input)
+
+    def request_export_report(self, **kwargs):  # needs work
+        if len(kwargs) > 0:
+            input.update(kwargs)
+        return self.__private_api_grab(method='AddExport')
+
+    def get_export_statuses(self, report):
+        input['report'] = report
+        return self.__private_api_grab(method='ExportStatus', input=input)
+
+    def get_report_id(self, report_id):
+        input['id'] = report_id
+        return self.__private_api_grab(method='RetrieveExport', input=input)
+
+    def remove_export_report(self, type, report_id):
+        input['type'] = type
+        input['id'] = report_id
+        return self.__private_api_grab(method='RemoveExport', input=input)
+
+    def add_standard_order(self):
+        pass
+
+    def cancel_open_order(self):
+         pass
+
+    def get_deposit_methods(self):
+        pass
+
+    def get_deposit_addresses(self):
+        pass
+
+    def status_recent_deposits(self):
+        pass
+
+    def get_withdrawal_information(self):
+        pass
+
+    def withdraw_funds(self):
+        pass
+
+    def status_recent_withdrawals(self):
+        pass
 
